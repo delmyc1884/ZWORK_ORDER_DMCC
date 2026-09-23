@@ -4,38 +4,53 @@ CLASS zcl_work_order_crud_dmcc DEFINITION
   CREATE PUBLIC .
 
   PUBLIC SECTION.
-METHODS create_work_order
-  IMPORTING
-    iv_work_order_id TYPE zde_work_order_id_dmcc
-    iv_customer_id   TYPE zde_customer_id_dmcc
-    iv_technician_id TYPE zde_technician_id_dmcc
-    iv_creation_date TYPE ztworkorderdmcc-creation_date
-    iv_status        TYPE zde_status_dmcc
-    iv_priority      TYPE zde_priority_dmcc
-    iv_description TYPE ztworkorderdmcc-description
-  RETURNING
-    VALUE(rv_success) TYPE abap_bool.
 
-  METHODS read_work_order
-  IMPORTING
-     iv_work_order_id TYPE zde_work_order_id_dmcc
-  RETURNING
-    VALUE(rs_order) TYPE ztworkorderdmcc.
+  TYPES ty_t_work_orders TYPE STANDARD TABLE OF ztworkorderdmcc
+  WITH EMPTY KEY.
 
-  METHODS update_work_order
-    IMPORTING
-      iv_work_order_id TYPE zde_work_order_id_dmcc
-      iv_status        TYPE zde_status_dmcc
-      iv_priority      TYPE zde_priority_dmcc
-      iv_description   TYPE ztworkorderdmcc-description
-    RETURNING
-      VALUE(rv_success) TYPE abap_bool.
+  METHODS create_work_order
+     IMPORTING
+       iv_work_order_id TYPE zde_work_order_id_dmcc
+       iv_customer_id   TYPE zde_customer_id_dmcc
+       iv_technician_id TYPE zde_technician_id_dmcc
+       iv_creation_date TYPE ztworkorderdmcc-creation_date
+       iv_status        TYPE zde_status_dmcc
+       iv_priority      TYPE zde_priority_dmcc
+        iv_description TYPE ztworkorderdmcc-description
+     RETURNING
+        VALUE(rv_success) TYPE abap_bool.
 
-  METHODS delete_work_order
-  IMPORTING
-    iv_work_order_id TYPE zde_work_order_id_dmcc
-  RETURNING
-    VALUE(rv_success) TYPE abap_bool.
+   METHODS read_work_order
+     IMPORTING
+       iv_work_order_id TYPE zde_work_order_id_dmcc
+     RETURNING
+        VALUE(rs_order) TYPE ztworkorderdmcc.
+
+    METHODS update_work_order
+       IMPORTING
+          iv_work_order_id TYPE zde_work_order_id_dmcc
+          iv_status        TYPE zde_status_dmcc
+          iv_priority      TYPE zde_priority_dmcc
+          iv_description   TYPE ztworkorderdmcc-description
+       RETURNING
+          VALUE(rv_success) TYPE abap_bool.
+
+    METHODS delete_work_order
+      IMPORTING
+         iv_work_order_id TYPE zde_work_order_id_dmcc
+      RETURNING
+       VALUE(rv_success) TYPE abap_bool.
+
+    METHODS read_work_orders
+      IMPORTING
+        iv_customer_id TYPE zde_customer_id_dmcc OPTIONAL
+        iv_status      TYPE zde_status_dmcc OPTIONAL
+        iv_date_from   TYPE ztworkorderdmcc-creation_date OPTIONAL
+        iv_date_to     TYPE ztworkorderdmcc-creation_date OPTIONAL
+      RETURNING
+        VALUE(rt_orders) TYPE ty_t_work_orders.
+
+
 
   PROTECTED SECTION.
 
@@ -133,6 +148,30 @@ METHOD update_work_order.
   IF lv_valid_values = abap_false.
     RETURN.
   ENDIF.
+  DATA(lv_work_order_id) = iv_work_order_id.
+
+   DATA(lo_lock) =
+       cl_abap_lock_object_factory=>get_instance(
+        iv_name = 'EZWORKDMCC'
+        ).
+   TRY.
+
+    lo_lock->enqueue(
+      it_parameter = VALUE #(
+        ( name  = 'WORK_ORDER_ID'
+          value = REF #( lv_work_order_id ) )
+      )
+    ).
+
+  CATCH cx_abap_foreign_lock.
+    RETURN.
+
+  CATCH cx_abap_lock_failure.
+    RETURN.
+
+
+
+ENDTRY.
 
   UPDATE ztworkorderdmcc
     SET status      = @iv_status,
@@ -148,6 +187,14 @@ METHOD update_work_order.
     rv_success = abap_true.
    ENDIF.
 
+TRY.
+
+    lo_lock->dequeue( ).
+
+  CATCH cx_abap_lock_failure.
+
+
+ENDTRY.
 ENDMETHOD.
 
 METHOD delete_work_order.
@@ -203,6 +250,23 @@ METHOD add_history.
     modification_date  = cl_abap_context_info=>get_system_date( )
     change_description = iv_change_description
   ) ).
+
+ENDMETHOD.
+
+METHOD read_work_orders.
+
+  SELECT
+    FROM ztworkorderdmcc
+    FIELDS *
+    WHERE ( @iv_customer_id IS INITIAL
+            OR customer_id = @iv_customer_id )
+      AND ( @iv_status IS INITIAL
+            OR status = @iv_status )
+      AND ( @iv_date_from IS INITIAL
+            OR creation_date >= @iv_date_from )
+      AND ( @iv_date_to IS INITIAL
+            OR creation_date <= @iv_date_to )
+    INTO TABLE @rt_orders.
 
 ENDMETHOD.
 

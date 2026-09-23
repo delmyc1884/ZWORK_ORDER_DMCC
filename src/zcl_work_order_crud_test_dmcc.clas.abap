@@ -23,7 +23,9 @@ CLASS zcl_work_order_crud_test_dmcc DEFINITION
        RETURNING
        VALUE(rv_success) TYPE abap_bool.
 
-
+    METHODS test_read_work_orders
+       RETURNING
+       VALUE(rt_orders) TYPE zcl_work_order_crud_dmcc=>ty_t_work_orders.
 
 ENDCLASS.
 
@@ -108,6 +110,18 @@ CLASS zcl_work_order_crud_test_dmcc IMPLEMENTATION.
 
   ENDIF.
 
+  DATA(lt_orders) = test_read_work_orders( ).
+
+     out->write( '--- CONSULTA CON FILTROS ---' ).
+    LOOP AT lt_orders INTO DATA(ls_filtered_order).
+        out->write(
+            |Orden: { ls_filtered_order-work_order_id } - |
+         && |Cliente: { ls_filtered_order-customer_id } - |
+         && |Estado: { ls_filtered_order-status } - |
+         && |Fecha: { ls_filtered_order-creation_date }|
+                  ).
+    ENDLOOP.
+
   DATA(lv_delete) = test_delete_work_order( ).
 
   IF lv_delete = abap_true.
@@ -121,6 +135,8 @@ CLASS zcl_work_order_crud_test_dmcc IMPLEMENTATION.
     ELSE.
      out->write( 'Verificacion DELETE: la orden aun existe.' ).
   ENDIF.
+
+
 
 ENDMETHOD.
 
@@ -154,6 +170,17 @@ METHOD test_delete_work_order.
 
   rv_success = lo_crud->delete_work_order(
     iv_work_order_id = '0000000001'
+  ).
+
+ENDMETHOD.
+
+METHOD test_read_work_orders.
+
+  DATA(lo_crud) = NEW zcl_work_order_crud_dmcc( ).
+
+  rt_orders = lo_crud->read_work_orders(
+    iv_customer_id = '00000001'
+    iv_status      = 'PE'
   ).
 
 ENDMETHOD.
