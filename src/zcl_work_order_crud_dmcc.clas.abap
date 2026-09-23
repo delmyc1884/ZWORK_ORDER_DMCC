@@ -150,11 +150,12 @@ METHOD update_work_order.
   ENDIF.
   DATA(lv_work_order_id) = iv_work_order_id.
 
-   DATA(lo_lock) =
-       cl_abap_lock_object_factory=>get_instance(
+TRY.
+
+    DATA(lo_lock) =
+      cl_abap_lock_object_factory=>get_instance(
         iv_name = 'EZWORKDMCC'
-        ).
-   TRY.
+      ).
 
     lo_lock->enqueue(
       it_parameter = VALUE #(
@@ -163,13 +164,32 @@ METHOD update_work_order.
       )
     ).
 
+    UPDATE ztworkorderdmcc
+      SET status      = @iv_status,
+          priority    = @iv_priority,
+          description = @iv_description
+      WHERE work_order_id = @iv_work_order_id.
+
+    IF sy-subrc = 0.
+
+      add_history(
+        iv_work_order_id      = iv_work_order_id
+        iv_change_description = 'Orden de trabajo actualizada'
+      ).
+
+      rv_success = abap_true.
+
+    ENDIF.
+
+    lo_lock->dequeue( ).
+
   CATCH cx_abap_foreign_lock.
+    rv_success = abap_false.
     RETURN.
 
   CATCH cx_abap_lock_failure.
+    rv_success = abap_false.
     RETURN.
-
-
 
 ENDTRY.
 
@@ -191,8 +211,9 @@ TRY.
 
     lo_lock->dequeue( ).
 
-  CATCH cx_abap_lock_failure.
+  CATCH cx_abap_lock_failure INTO DATA(lx_dequeue).
 
+    DATA(lv_error_text) = lx_dequeue->get_text( ).
 
 ENDTRY.
 ENDMETHOD.
@@ -233,23 +254,25 @@ METHOD delete_work_order.
   ENDIF.
 
 ENDMETHOD.
-
 METHOD add_history.
 
   SELECT MAX( history_id )
     FROM ztwrderhistdmcc
+    WHERE history_id <> '000000000000'
     INTO @DATA(lv_max_history_id).
 
   DATA(lv_history_id) = CONV ztwrderhistdmcc-history_id(
     CONV int8( lv_max_history_id ) + 1
   ).
 
-  INSERT ztwrderhistdmcc FROM @( VALUE #(
-    history_id         = lv_history_id
-    work_order_id      = iv_work_order_id
-    modification_date  = cl_abap_context_info=>get_system_date( )
-    change_description = iv_change_description
-  ) ).
+  INSERT ztwrderhistdmcc FROM @(
+    VALUE #(
+      history_id         = lv_history_id
+      work_order_id      = iv_work_order_id
+      modification_date  = cl_abap_context_info=>get_system_date( )
+      change_description = iv_change_description
+    )
+  ).
 
 ENDMETHOD.
 
